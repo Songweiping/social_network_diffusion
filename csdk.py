@@ -24,7 +24,7 @@ FLAGS = flags.FLAGS
 
 
 class Options(object):
-    """options used by CDK model."""
+    """options used by CSDK model."""
     
     def __init__(self):
         #model options.
@@ -49,7 +49,7 @@ class Options(object):
 
 
 
-class CDK(object):
+class CSDK(object):
     """Basic diffusion kernel model."""
 
     def __init__(self, options, session):
