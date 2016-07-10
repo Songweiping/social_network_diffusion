@@ -1,5 +1,6 @@
 # social_network_diffusion
-  The code implements the model proposed in "Learning Social Network Embeddings for Predicting Information Diffusion - Simon Bourigault, Cedric Lagnier, Sylvain Lamprier, Ludovic Denoyer, Patrick Gallinari, Université Pierre et Marie Curie" published at WSDM 2014. During development, I have refered a lot to original implementation by Ludovic Denoyer
+  The code implements the model proposed in "Learning Social Network Embeddings for Predicting Information Diffusion - Simon Bourigault, Cedric Lagnier, Sylvain Lamprier, Ludovic Denoyer, Patrick Gallinari, Université Pierre et Marie Curie" published at WSDM 2014. During development, I have refered a lot to original implementation by 
+  Ludovic Denoyer(https://github.com/ludc/social_network_diffusion_embeddings)
   
   Dependencies:
   Tensorflow.
