@@ -6,6 +6,7 @@ from __future__ import print_function
 
 import sys
 import os
+import time
 import logging
 import random
 import numpy as np
@@ -135,8 +136,8 @@ class CDK(object):
         emb_contaminated2 = tf.nn.embedding_lookup(emb_user, contaminated2)
         emb_further = tf.nn.embedding_lookup(emb_user, further)
 
-        d1 = tf.reduce_sum(tf.square(tf.mul(emb_contaminated1, emb_contaminated2)))
-        d2 = tf.reduce_sum(tf.square(tf.mul(emb_contaminated1, emb_further)))
+        d1 = tf.reduce_sum(tf.square(tf.sub(emb_contaminated1, emb_contaminated2)))
+        d2 = tf.reduce_sum(tf.square(tf.sub(emb_contaminated1, emb_further)))
 
         #loss = d1 + (1 - d2)
         zero = tf.constant(0.0, dtype=tf.float32, shape=[1])
@@ -184,6 +185,7 @@ class CDK(object):
         opts = self._options
         loss_list = []
         last_count = 0
+        last_time = time.time()
         for i in xrange(opts.max_epoch):
             for j in xrange(opts.train_size):
                 idx = random.randint(0, opts.train_size - 1)
@@ -199,8 +201,11 @@ class CDK(object):
                     loss_list.append(loss)
                     average_loss = np.mean(np.array(loss_list))
                     progress = float(step) / float(opts.samples_to_train)
-                    print ("learning rate:%f  loss:%f average loss:%f progress:%f\r" % (
-                        lr, loss, average_loss, progress),
+                    now = time.time()
+                    rate = float(step - last_count) / (now - last_time)
+                    last_time = now
+                    print ("learning rate:%f  loss:%f average loss:%f rate:%f progress:%f\r" % (
+                        lr, loss, average_loss, rate, progress),
                             end="")
                     sys.stdout.flush()
                     last_count = step

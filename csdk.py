@@ -56,9 +56,10 @@ class CSDK(object):
         self._options = options
         self._session = session
         self._u2idx = {}
+        self._c2idx = {}
         self._buildIndex()
-        self._train_cascades = self._readFromFile(options.train_data)
-        self._test_cascades = self._readFromFile(options.test_data)
+        self._train_cascades, self._train_content = self._readFromFile(options.train_data)
+        self._test_cascades, self._test_content = self._readFromFile(options.test_data)
         self._options.train_size = len(self._train_cascades)
         self._options.test_size = len(self._test_cascades)
         self._options.samples_to_train = self._options.max_epoch * self._options.train_size
@@ -72,11 +73,16 @@ class CSDK(object):
 
         train_user_set = set()
         test_user_set = set()
+        train_content_set  = set()
+        test_content_set = set()
 
         for line in open(opts.train_data):
             if len(line.strip()) == 0:
                 continue
             chunks = line.strip().split()
+            #in CSDK model, first coloum should be the content.
+            train_content_set.add(chunks[0])
+            del chunks[0]
             for chunk in chunks:
                 user, timestamp = chunk.split(',')
                 train_user_set.add(user)
@@ -85,29 +91,44 @@ class CSDK(object):
             if len(line.strip()) == 0:
                 continue
             chunks = line.strip().split()
+            test_content_set.add(chunks[0])
+            del chunks[0]
             for chunk in chunks:
                 user, timestamp = chunk.split(',')
                 test_user_set.add(user)
 
         user_set = train_user_set & test_user_set
+        content_set = train_content_set & test_content_set
 
         pos = 0
         for user in user_set:
             self._u2idx[user] = pos
             pos += 1
 
-        opts.user_size = len(user_set)
-        logging.info("user size : %d" % (opts.user_size))
+        pos = 0
+        for content in content_set:
+            self._c2idx[content] = pos
+            pos += 1
 
+        opts.user_size = len(user_set)
+        opts.content_size  = len(content_set)
+        logging.info("user size : %d" % (opts.user_size))
+        logging.info("content size : %d" % (opts.content_size))
 
     def _readFromFile(self, filename):
         """read all cascade from training or testing files. """
         t_cascades = []
+        t_content = []
         for line in open(filename):
             if len(line.strip()) == 0:
                 continue
             userlist = []
             chunks = line.strip().split()
+            content = chunks[0]
+            if not self._c2idx.has_key(content):
+                continue
+            del chunks[0]
+
             for chunk in chunks:
                 user, timestamp = chunk.split(',')
                 if self._u2idx.has_key(user):
@@ -115,8 +136,9 @@ class CSDK(object):
 
             if len(userlist) > 1:
                 t_cascades.append(userlist)
+                t_content.append(content)
 
-        return t_cascades
+        return t_cascades, t_content
 
     def buildGraph(self):
         opts = self._options
@@ -126,17 +148,26 @@ class CSDK(object):
         self._contaminated2 = contaminated2
         further = tf.placeholder(tf.int32,shape=[1])
         self._further = further
-        
+        content = tf.placeholder(tf.int32, shape=[1])
+        self._content  = content
+
+
         emb_user = tf.Variable(tf.random_uniform([opts.user_size, opts.emb_dim], -1, 1), name="emb_user")
         self.emb_user = emb_user
+        
+        emb_content = tf.Variable(tf.random_uniform([opts.content_size, opts.emb_dim], -1, 1), name="emb_content")
+        self.emb_content = emb_user
+
         self.global_step = tf.Variable(0, trainable=False, name="global_step",dtype=tf.int32)
         
         emb_contaminated1 = tf.nn.embedding_lookup(emb_user, contaminated1)
         emb_contaminated2 = tf.nn.embedding_lookup(emb_user, contaminated2)
         emb_further = tf.nn.embedding_lookup(emb_user, further)
+        emb_c = tf.nn.embedding_lookup(emb_content, content)
 
-        d1 = tf.reduce_sum(tf.square(tf.mul(emb_contaminated1, emb_contaminated2)))
-        d2 = tf.reduce_sum(tf.square(tf.mul(emb_contaminated1, emb_further)))
+
+        d1 = tf.reduce_sum(tf.square(tf.sub(tf.add(emb_contaminated1, emb_c), emb_contaminated2)))
+        d2 = tf.reduce_sum(tf.square(tf.sub(tf.add(emb_contaminated1, emb_c), emb_further)))
 
         #loss = d1 + (1 - d2)
         zero = tf.constant(0.0, dtype=tf.float32, shape=[1])
@@ -191,7 +222,8 @@ class CSDK(object):
                 contaminated1, contaminated2, further = self.SampleUsers(cascade)
                 feed_dict = {self._contaminated1:contaminated1, 
                              self._contaminated2:contaminated2, 
-                             self._further:further}
+                             self._further:further,
+                             self._content:[self._c2idx[content]]}
 
                 (lr, loss, step, _) = self._session.run([self._lr, self._loss, self.global_step, self._train],
                                                        feed_dict=feed_dict)
