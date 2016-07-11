@@ -223,7 +223,7 @@ class CSDK(object):
                 feed_dict = {self._contaminated1:contaminated1, 
                              self._contaminated2:contaminated2, 
                              self._further:further,
-                             self._content:[self._c2idx[content]]}
+                             self._content:[self._c2idx[self._train_content[j]]]}
 
                 (lr, loss, step, _) = self._session.run([self._lr, self._loss, self.global_step, self._train],
                                                        feed_dict=feed_dict)

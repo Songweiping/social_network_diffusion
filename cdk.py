@@ -200,11 +200,11 @@ class CDK(object):
                 if (step - last_count) > 1000:
                     loss_list.append(loss)
                     average_loss = np.mean(np.array(loss_list))
-                    progress = float(step) / float(opts.samples_to_train)
+                    progress = 100 * float(step) / float(opts.samples_to_train)
                     now = time.time()
                     rate = float(step - last_count) / (now - last_time)
                     last_time = now
-                    print ("learning rate:%f  loss:%f average loss:%f rate:%f progress:%f\r" % (
+                    print ("learning rate:%f  loss:%f average loss:%f rate:%f progress:%f%%\r" % (
                         lr, loss, average_loss, rate, progress),
                             end="")
                     sys.stdout.flush()
