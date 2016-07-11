@@ -148,9 +148,9 @@ class CSDK(object):
         self._contaminated2 = contaminated2
         further = tf.placeholder(tf.int32,shape=[1])
         self._further = further
+
         content = tf.placeholder(tf.int32, shape=[1])
         self._content  = content
-
 
         emb_user = tf.Variable(tf.random_uniform([opts.user_size, opts.emb_dim], -1, 1), name="emb_user")
         self.emb_user = emb_user
@@ -219,11 +219,12 @@ class CSDK(object):
             for j in xrange(opts.train_size):
                 idx = random.randint(0, opts.train_size - 1)
                 cascade = self._train_cascades[idx]
+                content = self._train_content[idx]
                 contaminated1, contaminated2, further = self.SampleUsers(cascade)
                 feed_dict = {self._contaminated1:contaminated1, 
                              self._contaminated2:contaminated2, 
                              self._further:further,
-                             self._content:[self._c2idx[self._train_content[j]]]}
+                             self._content:[self._c2idx[content]]}
 
                 (lr, loss, step, _) = self._session.run([self._lr, self._loss, self.global_step, self._train],
                                                        feed_dict=feed_dict)
@@ -238,16 +239,18 @@ class CSDK(object):
                     last_count = step
         print("")
 
-    def computeDistanceMatrix(self):
+    def computeDistanceVector(self, user_source, content):
         """compute distance matrix among all users."""
         nemb = tf.nn.l2_normalize(self.emb_user, 1)
-        self.distance_matrix = tf.matmul(nemb, nemb, transpose_b = True, name="distance_matrix")
+        ncemb = tf.nn.l2_normalize(self.emb_content, 1)
+        emb_source = tf.gather(nemb, user_source)
+        emb_c = tf.gather(ncemb, content)
+        emb_source = tf.add(emb_source, emb_c)
+        self.distance_vector = tf.matmul(emb_source, nemb, transpose_b = True, name="distance_vector")
 
     def computeMAP(self, cascade):
         opts = self._options
-        user_fisrt = tf.slice(cascade, [0], [1])
-        distance = tf.gather(self.distance_matrix, user_fisrt)
-        _, indices = tf.nn.top_k(distance, opts.user_size, sorted=True)
+        _, indices = tf.nn.top_k(self.distance_vector, opts.user_size, sorted=True)
         self.indices = indices
 
 
@@ -255,15 +258,21 @@ class CSDK(object):
         """build evaluate graph."""
         cascade = tf.placeholder(tf.int32)
         self.cascade = cascade
-        self.computeDistanceMatrix()
+        content = tf.placeholder(tf.int32, shape=[1])
+        self._content  = content
+        user_source = tf.slice(cascade, [0], [1])
+        self.computeDistanceVector(user_source, self._content)
         self.computeMAP(cascade)
 
     def eval(self):
         final_avgp = 0.0
-        for cascade in self._test_cascades:
+        opts = self._options
+        for i in xrange(opts.test_size):
+            cascade = self._test_cascades[i]
+            content = self._test_content[i]
             cascade_size = len(cascade)
             #inputs = np.ndarray(shape=(cascade_size), dtype = np.int32)
-            indices = self._session.run(self.indices, feed_dict = {self.cascade:cascade})
+            indices = self._session.run(self.indices, feed_dict = {self.cascade:cascade, self._content:[self._c2idx[content]]})
             nb_positive = 0
             rank = 0
             avgp = 0.0
@@ -276,7 +285,7 @@ class CSDK(object):
                 rank += 1
             avgp /= float(cascade_size)
             final_avgp += avgp
-        final_avgp /= float(self._options.test_size)
+        final_avgp /= float(opts.test_size)
         print ("Average precision:%f" % (final_avgp))
 
 def main(_):
@@ -287,7 +296,7 @@ def main(_):
     options = Options()
     with tf.Graph().as_default(), tf.Session() as session:
         with tf.device("/cpu:0"):
-            model = CDK(options, session)
+            model = CSDK(options, session)
         model.train()
         model.eval()
         model.saver.save(session,
