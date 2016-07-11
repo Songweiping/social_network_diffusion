@@ -211,16 +211,17 @@ class CDK(object):
                     last_count = step
         print("")
 
-    def computeDistanceMatrix(self):
+    def computeDistanceVector(self, user_source):
         """compute distance matrix among all users."""
         nemb = tf.nn.l2_normalize(self.emb_user, 1)
-        self.distance_matrix = tf.matmul(nemb, nemb, transpose_b = True, name="distance_matrix")
-
+        emb_source = tf.gather(nemb, user_source)
+        self.distance_vector = tf.matmul(emb_source, nemb, transpose_b = True, name="distance_vector")
+        print  (self.distance_vector)
+    
     def computeMAP(self, cascade):
         opts = self._options
-        user_fisrt = tf.slice(cascade, [0], [1])
-        distance = tf.gather(self.distance_matrix, user_fisrt)
-        _, indices = tf.nn.top_k(distance, opts.user_size, sorted=True)
+        #distance = tf.gather(self.distance_matrix, user_fisrt)
+        _, indices = tf.nn.top_k(self.distance_vector, opts.user_size, sorted=True)
         self.indices = indices
 
 
@@ -228,7 +229,8 @@ class CDK(object):
         """build evaluate graph."""
         cascade = tf.placeholder(tf.int32)
         self.cascade = cascade
-        self.computeDistanceMatrix()
+        user_source = tf.slice(cascade, [0], [1])
+        self.computeDistanceVector(user_source)
         self.computeMAP(cascade)
 
     def eval(self):
