@@ -17,8 +17,8 @@ flags = tf.app.flags
 flags.DEFINE_string("train_data", None, "training file.")
 flags.DEFINE_string("test_data", None, "testing file.")
 flags.DEFINE_string("save_path", None, "path to save the model.")
-flags.DEFINE_integer("max_epoch", 1000, "max epochs.")
-flags.DEFINE_integer("emb_dim", 100, "embedding dimension.")
+flags.DEFINE_integer("max_epoch", 10, "max epochs.")
+flags.DEFINE_integer("emb_dim", 50, "embedding dimension.")
 flags.DEFINE_float("lr", 0.025, "initial learning rate.")
 
 FLAGS = flags.FLAGS
@@ -128,7 +128,7 @@ class CDK(object):
         further = tf.placeholder(tf.int32,shape=[1])
         self._further = further
         
-        emb_user = tf.Variable(tf.random_uniform([opts.user_size, opts.emb_dim], -1, 1), name="emb_user")
+        emb_user = tf.Variable(tf.random_uniform([opts.user_size, opts.emb_dim], -1.0, 1.0), name="emb_user")
         self.emb_user = emb_user
         self.global_step = tf.Variable(0, trainable=False, name="global_step",dtype=tf.int32)
         
@@ -138,14 +138,12 @@ class CDK(object):
 
         d1 = tf.reduce_sum(tf.square(tf.sub(emb_contaminated1, emb_contaminated2)))
         d2 = tf.reduce_sum(tf.square(tf.sub(emb_contaminated1, emb_further)))
-
-        #loss = d1 + (1 - d2)
+        self.d1 = d1
+        #hinge loss
         zero = tf.constant(0.0, dtype=tf.float32, shape=[1])
         one = tf.constant(1.0, dtype=tf.float32, shape=[1])
-
-        loss = tf.reduce_sum(tf.add(d1, tf.maximum(zero, tf.sub(one, d2))))
+        loss = tf.maximum(zero, d1 - d2 + one)
         self._loss = loss
-
         self._lr = opts.lr * (1.0 - tf.cast(self.global_step, tf.float32) / float(opts.samples_to_train))  
         optimizer = tf.train.GradientDescentOptimizer(self._lr)
         train = optimizer.minimize(loss,
@@ -195,28 +193,32 @@ class CDK(object):
                              self._contaminated2:contaminated2, 
                              self._further:further}
 
-                (lr, loss, step, _) = self._session.run([self._lr, self._loss, self.global_step, self._train],
+                (d1, lr, loss, step, _) = self._session.run([self.d1, self._lr, self._loss, self.global_step, self._train],
                                                        feed_dict=feed_dict)
-                if (step - last_count) > 1000:
+
+                if (step - last_count) > 100:
                     loss_list.append(loss)
                     average_loss = np.mean(np.array(loss_list))
                     progress = 100 * float(step) / float(opts.samples_to_train)
                     now = time.time()
                     rate = float(step - last_count) / (now - last_time)
                     last_time = now
-                    print ("learning rate:%f  loss:%f average loss:%f rate:%f progress:%f%%\r" % (
-                        lr, loss, average_loss, rate, progress),
+                    print ("d1:%f  learning rate:%f  loss:%f average loss:%f rate:%f progress:%f%%\r" % (
+                        d1, lr, loss, average_loss, rate, progress),
                             end="")
                     sys.stdout.flush()
                     last_count = step
         print("")
 
     def computeDistanceVector(self, user_source):
-        """compute distance matrix among all users."""
+        """compute euclidean distance matrix among all users."""
+        opts = self._options
         nemb = tf.nn.l2_normalize(self.emb_user, 1)
         emb_source = tf.gather(nemb, user_source)
-        self.distance_vector = tf.matmul(emb_source, nemb, transpose_b = True, name="distance_vector")
-        print  (self.distance_vector)
+        emb_source_paded = tf.tile(emb_source,[1, opts.user_size])
+        emb_source_matrix = tf.reshape(emb_source_paded,[opts.user_size, opts.emb_dim])
+        #self.distance_vector = tf.matmul(emb_source, nemb, transpose_b = True, name="distance_vector")
+        self.distance_vector = tf.sqrt(tf.reduce_sum(tf.square(tf.sub(emb_source_matrix, nemb)),1))
     
     def computeMAP(self, cascade):
         opts = self._options
@@ -244,7 +246,7 @@ class CDK(object):
             avgp = 0.0
             user_set = set(cascade)
             while nb_positive < cascade_size:
-                if indices[0][rank] in user_set:
+                if indices[rank] in user_set:
                     nb_positive += 1
                     pre = float(nb_positive) / float(rank + 1)
                     avgp += pre
