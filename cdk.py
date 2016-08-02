@@ -136,8 +136,8 @@ class CDK(object):
         emb_contaminated2 = tf.nn.embedding_lookup(emb_user, contaminated2)
         emb_further = tf.nn.embedding_lookup(emb_user, further)
 
-        d1 = tf.reduce_sum(tf.square(tf.sub(emb_contaminated1, emb_contaminated2)))
-        d2 = tf.reduce_sum(tf.square(tf.sub(emb_contaminated1, emb_further)))
+        d1 = tf.sqrt(tf.reduce_sum(tf.square(tf.sub(emb_contaminated1, emb_contaminated2))))
+        d2 = tf.sqrt(tf.reduce_sum(tf.square(tf.sub(emb_contaminated1, emb_further))))
         self.d1 = d1
         #hinge loss
         zero = tf.constant(0.0, dtype=tf.float32, shape=[1])
@@ -193,7 +193,7 @@ class CDK(object):
                              self._contaminated2:contaminated2, 
                              self._further:further}
 
-                (d1, lr, loss, step, _) = self._session.run([self.d1, self._lr, self._loss, self.global_step, self._train],
+                (lr, loss, step, _) = self._session.run([self._lr, self._loss, self.global_step, self._train],
                                                        feed_dict=feed_dict)
 
                 if (step - last_count) > 100:
@@ -203,8 +203,8 @@ class CDK(object):
                     now = time.time()
                     rate = float(step - last_count) / (now - last_time)
                     last_time = now
-                    print ("d1:%f  learning rate:%f  loss:%f average loss:%f rate:%f progress:%f%%\r" % (
-                        d1, lr, loss, average_loss, rate, progress),
+                    print ("learning rate:%f  loss:%f average loss:%f rate:%f progress:%f%%\r" % (
+                        lr, loss, average_loss, rate, progress),
                             end="")
                     sys.stdout.flush()
                     last_count = step
