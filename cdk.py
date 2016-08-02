@@ -62,6 +62,7 @@ class CDK(object):
         self._test_cascades = self._readFromFile(options.test_data)
         self._options.train_size = len(self._train_cascades)
         self._options.test_size = len(self._test_cascades)
+        logging.info("training set size:%d    testing set size:%d" % (self._options.train_size, self._options.test_size))
         self._options.samples_to_train = self._options.max_epoch * self._options.train_size
         self.buildGraph()
         self.buildEvalGraph()
@@ -90,14 +91,14 @@ class CDK(object):
                 user, timestamp = chunk.split(',')
                 test_user_set.add(user)
 
-        user_set = train_user_set & test_user_set
+        #user_set = train_user_set | test_user_set
 
         pos = 0
-        for user in user_set:
+        for user in train_user_set:
             self._u2idx[user] = pos
             pos += 1
 
-        opts.user_size = len(user_set)
+        opts.user_size = len(train_user_set)
         logging.info("user size : %d" % (opts.user_size))
 
 
@@ -136,9 +137,11 @@ class CDK(object):
         emb_contaminated2 = tf.nn.embedding_lookup(emb_user, contaminated2)
         emb_further = tf.nn.embedding_lookup(emb_user, further)
 
-        d1 = tf.sqrt(tf.reduce_sum(tf.square(tf.sub(emb_contaminated1, emb_contaminated2))))
-        d2 = tf.sqrt(tf.reduce_sum(tf.square(tf.sub(emb_contaminated1, emb_further))))
-        self.d1 = d1
+        d1 = tf.reduce_sum(tf.square(tf.sub(emb_contaminated1, emb_contaminated2)))
+        d2 = tf.reduce_sum(tf.square(tf.sub(emb_contaminated1, emb_further)))
+        #self.d1 = d1
+        #d1 = tf.sqrt(tf.reduce_sum(tf.square(tf.sub(emb_contaminated1, emb_contaminated2))))
+        #d2 = tf.sqrt(tf.reduce_sum(tf.square(tf.sub(emb_contaminated1, emb_further))))
         #hinge loss
         zero = tf.constant(0.0, dtype=tf.float32, shape=[1])
         one = tf.constant(1.0, dtype=tf.float32, shape=[1])
@@ -237,6 +240,7 @@ class CDK(object):
 
     def eval(self):
         final_avgp = 0.0
+        opts = self._options
         for cascade in self._test_cascades:
             cascade_size = len(cascade)
             #inputs = np.ndarray(shape=(cascade_size), dtype = np.int32)
@@ -246,7 +250,7 @@ class CDK(object):
             avgp = 0.0
             user_set = set(cascade)
             while nb_positive < cascade_size:
-                if indices[rank] in user_set:
+                if indices[opts.user_size - rank - 1] in user_set:
                     nb_positive += 1
                     pre = float(nb_positive) / float(rank + 1)
                     avgp += pre
